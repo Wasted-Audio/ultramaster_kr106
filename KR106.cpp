@@ -302,7 +302,11 @@ void KR106::ProcessMidiMsg(const IMidiMsg& msg)
 void KR106::OnParamChange(int paramIdx)
 {
   if (paramIdx == kPower)
+  {
     mPowerOn = GetParam(kPower)->Bool();
+    if (auto* pUI = GetUI())
+      pUI->SetAllControlsDirty();
+  }
   else if (paramIdx == kTransposeOffset)
     mDSP.SetKeyTranspose((int)GetParam(kTransposeOffset)->Value());
   else

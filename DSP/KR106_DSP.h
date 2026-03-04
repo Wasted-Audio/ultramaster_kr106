@@ -142,18 +142,18 @@ public:
     mSynth.ForEachVoice([](SynthVoice& sv) { sv.Release(); });
   }
 
-  // Lowest-first poly: prefer idle, then releasing, then steal oldest held
+  // Lowest-first poly: prefer releasing, then idle, then steal oldest held
   int FindLowestFreeVoice()
   {
     int nv = static_cast<int>(mSynth.NVoices());
 
-    // 1. Lowest idle voice (envelope finished)
+    // 1. Lowest releasing voice (NoteOff sent, still in release tail) — reuse same voice
+    for (int i = 0; i < nv; i++)
+      if (mVoiceNote[i] < 0 && mSynth.GetVoice(i)->GetBusy()) return i;
+
+    // 2. Lowest idle voice (envelope finished)
     for (int i = 0; i < nv; i++)
       if (!mSynth.GetVoice(i)->GetBusy()) return i;
-
-    // 2. Lowest releasing voice (NoteOff sent, still in release tail)
-    for (int i = 0; i < nv; i++)
-      if (mVoiceNote[i] < 0) return i;
 
     // 3. All voices actively held — steal the oldest
     int oldest = 0;
