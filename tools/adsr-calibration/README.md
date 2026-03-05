@@ -108,9 +108,6 @@ The Juno-106 shares one ADSR for both VCA and VCF. During decay/release, the VCF
 - Release measurements may be compressed by VCF closure
 - Many measurements in `measured_data.csv` are marked "low" confidence for this reason
 
-### Sysex Corruption
-5 of the 128 factory presets had zeroed volume in our sysex dump, suggesting data corruption. Other parameters may also have bit errors, which could explain some non-monotonic measurements.
-
 ### Attack Non-Monotonicity
 A16 Brass & Strings (A=0.346→515ms) was excluded from anchors because B12 Violin (A=0.339→236ms, high confidence, no VCF) gives a much lower value at nearly the same slider position. The Brass & Strings attack may be inflated by VCF opening during the attack phase.
 

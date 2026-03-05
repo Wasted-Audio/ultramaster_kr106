@@ -641,6 +641,14 @@ public:
         int prevMode = mPortaMode;
         mPortaMode = static_cast<int>(value); // 0=Unison(up), 1=Porta(mid), 2=Poly(down)
 
+        if (mSuppressHoldRelease)
+        {
+          // During preset load: update portaEnabled but don't release voices or clear held notes
+          bool portaOn = (mPortaMode <= 1);
+          SetVoiceParam([portaOn](kr106::Voice<T>& v) { v.mPortaEnabled = portaOn; });
+          break;
+        }
+
         // Release all voices when switching modes
         if (prevMode == 0 && mPortaMode != 0)
         {

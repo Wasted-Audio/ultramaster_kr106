@@ -200,16 +200,19 @@ KR106::KR106(const InstanceInfo& info)
 #if IPLUG_DSP
 void KR106::ProcessBlock(sample** inputs, sample** outputs, int nFrames)
 {
-  // VST3 preset sync: RestorePreset runs on the controller thread but
-  // iPlug2's ProcessParameterChanges doesn't handle kPresetParam, so
-  // the DSP params may be stale when the first notes of a new preset
-  // arrive on the audio thread. Detect the change and re-push params.
-  int presetIdx = GetCurrentPresetIdx();
-  if (presetIdx != mLastSyncedPreset)
+  // Catch preset changes from the host UI / AU property API (may arrive
+  // asynchronously on a different thread). MIDI program changes are handled
+  // immediately in ProcessMidiMsg; this is a fallback for non-MIDI paths.
   {
-    mLastSyncedPreset = presetIdx;
-    for (int i = 0; i < kNumParams; i++)
-      mDSP.SetParam(i, GetParam(i)->Value());
+    int presetIdx = GetCurrentPresetIdx();
+    if (presetIdx != mLastSyncedPreset)
+    {
+      mLastSyncedPreset = presetIdx;
+      mDSP.mSuppressHoldRelease = true;
+      for (int i = 0; i < kNumParams; i++)
+        mDSP.SetParam(i, GetParam(i)->Value());
+      mDSP.mSuppressHoldRelease = false;
+    }
   }
 
   if (mHoldOff.exchange(false))
@@ -299,9 +302,8 @@ void KR106::ProcessMidiMsg(const IMidiMsg& msg)
 {
   TRACE;
 
-  // Handle MIDI program changes on the audio thread for sample-accurate preset switching.
-  // The host also triggers RestorePreset asynchronously, but that may arrive too late for
-  // note-ons at the same sample offset in a MIDI file.
+  // Handle MIDI program changes immediately so params are set before any
+  // note-on in the same batch triggers a voice.
   if (msg.StatusMsg() == IMidiMsg::kProgramChange)
   {
     int pgm = msg.Program();
@@ -380,8 +382,6 @@ int KR106::UnserializeState(const IByteChunk& chunk, int startPos)
   mRestoringPreset = true;
   mDSP.mSuppressHoldRelease = true;
   int pos = Plugin::UnserializeState(chunk, startPos);
-  mRestoringPreset = false;
-  mDSP.mSuppressHoldRelease = false;
 
   for (int i = 0; i < nLive; i++)
   {
@@ -391,6 +391,13 @@ int KR106::UnserializeState(const IByteChunk& chunk, int startPos)
       OnParamChange(kLiveParams[i]);
     }
   }
+  mRestoringPreset = false;
+  mDSP.mSuppressHoldRelease = false;
+
+  // Mark preset as synced so ProcessBlock doesn't redundantly re-apply
+  // all params without the mSuppressHoldRelease guard.
+  mLastSyncedPreset = GetCurrentPresetIdx();
+
   return pos;
 }
 
