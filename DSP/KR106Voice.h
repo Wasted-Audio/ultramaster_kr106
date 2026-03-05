@@ -6,6 +6,8 @@
 
 #include "SynthVoice.h"
 #include "KR106Oscillators.h"
+#include "FPUUpsampler2x.h"
+#include "FPUDownsampler2x.h"
 
 // Complete KR-106 voice: oscillators -> VCF -> ADSR -> VCA
 // Ported from kr106_voice.h/kr106_voice.C
@@ -23,9 +25,27 @@ struct VCF
   float mS[4] = {}; // integrator states
   uint32_t mNoiseSeed = 123456789u; // thermal noise PRNG state
 
+  // 2x oversampling: HIIR polyphase filters for anti-imaging/aliasing
+  hiir::Upsampler2xFPU<12, float> mUpsampler;
+  hiir::Downsampler2xFPU<12, float> mDownsampler;
+
+  VCF()
+  {
+    static constexpr double kCoeffs2x[12] = {
+      0.036681502163648017, 0.13654762463195794, 0.27463175937945444,
+      0.42313861743656711, 0.56109869787919531, 0.67754004997416184,
+      0.76974183386322703, 0.83988962484963892, 0.89226081800387902,
+      0.9315419599631839,  0.96209454837808417, 0.98781637073289585
+    };
+    mUpsampler.set_coefs(kCoeffs2x);
+    mDownsampler.set_coefs(kCoeffs2x);
+  }
+
   void Reset()
   {
     mS[0] = mS[1] = mS[2] = mS[3] = 0.f;
+    mUpsampler.clear_buffers();
+    mDownsampler.clear_buffers();
   }
 
   // OTA saturation on the feedback path (Padé tanh approximant).
@@ -40,9 +60,25 @@ struct VCF
     return x * (27.f + x2) / (27.f + 9.f * x2);
   }
 
-  // frq: normalized cutoff [0, ~0.9] where 1.0 = Nyquist
+  // frq: normalized cutoff [0, ~0.9] where 1.0 = Nyquist (base rate)
   // res: resonance amount [0, 1]
+  // 2x oversampled: upsample input, run filter at 2x rate, downsample
   float Process(float input, float frq, float res)
+  {
+    float up[2], down[2];
+    mUpsampler.process_sample(up[0], up[1], input);
+
+    // Halve frq for the oversampled domain (Nyquist is 2x higher)
+    float frq2x = frq * 0.5f;
+    down[0] = ProcessSample(up[0], frq2x, res);
+    down[1] = ProcessSample(up[1], frq2x, res);
+
+    return mDownsampler.process_sample(down);
+  }
+
+private:
+  // Internal per-sample filter at the oversampled rate
+  float ProcessSample(float input, float frq, float res)
   {
     // Warp cutoff to continuous-time frequency, then to integrator coeff
     float g = tanf(std::min(frq, 0.85f) * static_cast<float>(M_PI) * 0.5f);
@@ -58,24 +94,8 @@ struct VCF
     float noiseLevel = 1e-3f / (1.f + stateEnergy * 1000.f);
     input += white * noiseLevel;
 
-    // Q compensation: models the BA662's non-inverting input path
-    // that boosts input drive proportionally with resonance, preventing
-    // the passband from thinning out. Partial compensation (~-5dB at
-    // max res vs ~-15dB without) matches the hardware character.
-    input *= 1.f + res * 2.f;
-
-    // Feedback amount (k=0 no resonance, k≈4 self-oscillation)
-    // In a 4-pole ladder the resonant gain is 1/4, so k=4 is the
-    // threshold. k=4.5 at max res gives ~12% excess loop gain for
-    // fast startup; OTASat limits the amplitude naturally.
-    float k = res * 4.5f;
-
-    // Taper resonance near Nyquist to reduce aliased harmonics
-    if (frq > 0.7f)
-    {
-      float taper = 1.f - (frq - 0.7f) / 0.15f; // 0.7→1.0, 0.85→0
-      k *= std::max(taper, 0.25f);
-    }
+    // Feedback amount (k=0 no resonance, k=4 self-oscillation threshold)
+    float k = res * 4.f;
 
     // Precompute gains for the 4-pole cascade solution
     float g1 = g / (1.f + g);  // one-pole gain
@@ -83,6 +103,17 @@ struct VCF
     // Linear cascade: the predictor is exact, so the filter is
     // unconditionally stable regardless of modulation speed.
     float G = g1 * g1 * g1 * g1;
+
+    // OTA bandwidth rolloff: the IR3109's transconductance drops at
+    // high frequencies due to transistor fT limits. Below frq=0.3
+    // (where aliased harmonics fall above audible range), allow full
+    // self-oscillation character. Above 0.3, progressively reduce the
+    // loop gain to prevent the resonance limit cycle from producing
+    // audible aliased harmonics near Nyquist.
+    float maxLoop = 1.2f - std::max(frq - 0.3f, 0.f);
+    maxLoop = std::max(maxLoop, 0.4f);
+    float maxK = maxLoop / std::max(G, 1e-6f);
+    k = std::min(k, maxK);
 
     float S = mS[0] * g1 * g1 * g1
             + mS[1] * g1 * g1

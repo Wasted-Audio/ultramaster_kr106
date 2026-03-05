@@ -74,7 +74,9 @@ class KR106SliderControl : public ISliderControlBase
 public:
   KR106SliderControl(const IRECT& bounds, int paramIdx)
   : ISliderControlBase(bounds, paramIdx, EDirection::Vertical, 2.0, 5.f)
-  {}
+  {
+    SetActionFunction(ShowBubbleVerticalActionFunc);
+  }
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {

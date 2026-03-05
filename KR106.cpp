@@ -16,7 +16,12 @@ KR106::KR106(const InstanceInfo& info)
   GetParam(kDcoPwm)->InitDouble("DCO PWM", 0., 0., 1., 0.01, "", IParam::kFlagsNone, "", IParam::ShapeLinear(), IParam::kUnitCustom, disp10);
   GetParam(kDcoSub)->InitDouble("DCO Sub", 1., 0., 1., 0.01, "", IParam::kFlagsNone, "", IParam::ShapeLinear(), IParam::kUnitCustom, disp10);
   GetParam(kDcoNoise)->InitDouble("DCO Noise", 0., 0., 1., 0.01, "", IParam::kFlagsNone, "", IParam::ShapeLinear(), IParam::kUnitCustom, disp10);
-  GetParam(kVcfFreq)->InitDouble("VCF Freq", 0.5, 0., 1., 0.01, "", IParam::kFlagsNone, "", IParam::ShapeLinear(), IParam::kUnitCustom, disp10);
+  auto dispVcfHz = [](double v, WDL_String& s) {
+    double hz = 20.0 * std::pow(900.0, v);
+    if (hz >= 1000.0) s.SetFormatted(32, "%.1f kHz", hz / 1000.0);
+    else s.SetFormatted(32, "%.0f Hz", hz);
+  };
+  GetParam(kVcfFreq)->InitDouble("VCF Freq", 0.5, 0., 1., 0.01, "", IParam::kFlagsNone, "", IParam::ShapeLinear(), IParam::kUnitCustom, dispVcfHz);
   GetParam(kVcfRes)->InitDouble("VCF Res", 0., 0., 1., 0.01, "", IParam::kFlagsNone, "", IParam::ShapeLinear(), IParam::kUnitCustom, disp10);
   GetParam(kVcfEnv)->InitDouble("VCF Env", 0., 0., 1., 0.01, "", IParam::kFlagsNone, "", IParam::ShapeLinear(), IParam::kUnitCustom, disp10);
   GetParam(kVcfLfo)->InitDouble("VCF LFO", 0., 0., 1., 0.01, "", IParam::kFlagsNone, "", IParam::ShapeLinear(), IParam::kUnitCustom, disp10);
@@ -175,6 +180,9 @@ KR106::KR106(const InstanceInfo& info)
     pGraphics->AttachControl(new KR106ChorusOffControl(IRECT(735, 52, 752, 71), kChorusI, kChorusII));
     pGraphics->AttachControl(new KR106ButtonLEDControl(IRECT(751, 43, 768, 71), kChorusI, kYellow, ledBitmap));
     pGraphics->AttachControl(new KR106ButtonLEDControl(IRECT(767, 43, 784, 71), kChorusII, kOrange, ledBitmap));
+
+    // Bubble tooltip for slider value readout (drawn on top of all controls)
+    pGraphics->AttachBubbleControl(IText(12.f, COLOR_BLACK, "Roboto-Regular", EAlign::Center));
 
     // === SCOPE (upper right) ===
     pGraphics->AttachControl(new KR106ScopeControl(IRECT(791, 21, 919, 95)), kCtrlTagScope);
