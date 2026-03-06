@@ -708,7 +708,7 @@ public:
       }
 
       // Search backwards for two consecutive sync pulses — the samples
-      // between them are exactly one waveform period
+      // between them are one full sub-oscillator period (two DCO cycles)
       int endDist = -1, startDist = -1;
       for (int s = 1; s <= mSamplesAvail; s++)
       {

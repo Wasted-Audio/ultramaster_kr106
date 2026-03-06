@@ -321,21 +321,24 @@ public:
       mModulations.resize(kNumModulations, nullptr);
     }
 
-    // 2. Clear sync buffer and assign to first active voice only (for scope)
+    // 2. Clear sync buffer and assign to oldest active voice only (for scope)
     memset(mSyncBuffer.data(), 0, nFrames * sizeof(T));
-    bool syncAssigned = false;
-    mSynth.ForEachVoice([this, &syncAssigned](SynthVoice& v) {
-      auto& jv = dynamic_cast<kr106::Voice<T>&>(v);
-      if (!syncAssigned && v.GetBusy())
+    int nv = static_cast<int>(mSynth.NVoices());
+    int scopeVoice = -1;
+    int64_t oldestAge = INT64_MAX;
+    for (int i = 0; i < nv; i++)
+    {
+      if (mSynth.GetVoice(i)->GetBusy() && mVoiceAge[i] < oldestAge)
       {
-        jv.mSyncOut = mSyncBuffer.data();
-        syncAssigned = true;
+        oldestAge = mVoiceAge[i];
+        scopeVoice = i;
       }
-      else
-      {
-        jv.mSyncOut = nullptr;
-      }
-    });
+    }
+    for (int i = 0; i < nv; i++)
+    {
+      auto& jv = dynamic_cast<kr106::Voice<T>&>(*mSynth.GetVoice(i));
+      jv.mSyncOut = (i == scopeVoice) ? mSyncBuffer.data() : nullptr;
+    }
 
     // 3. Check if any voice is active (for LFO delay reset)
     bool anyActive = false;

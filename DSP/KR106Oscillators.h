@@ -90,8 +90,8 @@ struct Oscillators
     if (mPos >= 1.f)
     {
       mPos -= 1.f;
-      sync = true;
       mSubState = !mSubState; // flip-flop toggles on each saw cycle
+      sync = mSubState;       // sync once per sub period (every 2 DCO cycles)
       mBlipEnv = 1.f;         // trigger discharge transient
     }
 
@@ -111,11 +111,11 @@ struct Oscillators
     // so the PW threshold crossing shifts with curvature. Invert the
     // curvature to find the linear phase of the crossing for polyBLEP.
     float effPW = pulseWidth / (1.f + kSawCurve * (1.f - pulseWidth));
-    float pulse = (mPos < effPW) ? 1.f : -1.f;
-    pulse += PolyBLEP(mPos, cps);                          // rising edge at phase=0
+    float pulse = (mPos < effPW) ? -1.f : 1.f;
+    pulse -= PolyBLEP(mPos, cps);                          // falling edge at reset
     float pw2 = mPos - effPW;
     if (pw2 < 0.f) pw2 += 1.f;
-    pulse -= PolyBLEP(pw2, cps);                            // falling edge
+    pulse += PolyBLEP(pw2, cps);                            // rising edge at PW crossing
 
     // --- Sub: flip-flop + polyBLEP + passive LP ---
     float sub = mSubState ? 1.f : -1.f;
