@@ -1,8 +1,6 @@
 BUILD_DIR = build-juce
 CONFIG   ?= Debug
 
-# ── JUCE / CMake targets ─────────────────────────────────────────────────────
-
 .PHONY: build run reaper clean deps help
 
 build:
@@ -31,51 +29,15 @@ deps:
 	  libwebkit2gtk-4.1-dev \
 	  mesa-common-dev libgl-dev
 
-# ── iPlug2 / Xcode targets (legacy) ──────────────────────────────────────────
-
-IPLUG_PROJECT = projects/KR106-macOS.xcodeproj
-
-.PHONY: iplug-app iplug-vst3 iplug-au iplug-all iplug-clean check-iplug2
-
-iplug-app: check-iplug2
-	xcodebuild -project "$(IPLUG_PROJECT)" -target APP -configuration $(CONFIG)
-
-iplug-vst3: check-iplug2
-	xcodebuild -project "$(IPLUG_PROJECT)" -target VST3 -configuration $(CONFIG)
-
-iplug-au: check-iplug2
-	xcodebuild -project "$(IPLUG_PROJECT)" -target AU -configuration $(CONFIG)
-
-iplug-all: check-iplug2
-	xcodebuild -project "$(IPLUG_PROJECT)" -target All -configuration $(CONFIG)
-
-iplug-clean:
-	rm -rf build-mac
-	find "$(HOME)/Library/Developer/Xcode/DerivedData" -maxdepth 1 -name 'KR106-macOS-*' -exec rm -rf {} +
-
-check-iplug2:
-	@test -f ../iPlug2/common-mac.xcconfig || \
-	  (echo "ERROR: iPlug2 not found at ../iPlug2"; exit 1)
-
-# ── Help ──────────────────────────────────────────────────────────────────────
-
 help:
 	@echo ""
 	@echo "Ultramaster KR-106"
 	@echo ""
-	@echo "  JUCE (CMake):"
-	@echo "    make build        Build all formats (AU, VST3, LV2, Standalone)"
-	@echo "    make run          Build and launch Standalone"
-	@echo "    make reaper       Restart Reaper with fresh VST cache"
-	@echo "    make deps         Install Linux build dependencies (apt)"
-	@echo "    make clean        Remove build directory"
-	@echo ""
-	@echo "  iPlug2 (Xcode, legacy):"
-	@echo "    make iplug-app    Standalone .app"
-	@echo "    make iplug-vst3   VST3 plugin"
-	@echo "    make iplug-au     Audio Unit"
-	@echo "    make iplug-all    All formats"
-	@echo "    make iplug-clean  Remove Xcode build artifacts"
+	@echo "  make build        Build all formats (AU, VST3, LV2, Standalone)"
+	@echo "  make run          Build and launch Standalone (macOS)"
+	@echo "  make reaper       Build and restart Reaper (macOS)"
+	@echo "  make deps         Install Linux build dependencies (apt)"
+	@echo "  make clean        Remove build directory"
 	@echo ""
 	@echo "  CONFIG=Release make build  — release build"
 	@echo ""
