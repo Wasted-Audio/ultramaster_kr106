@@ -29,11 +29,18 @@ jobs:
           cat > pkg/INSTALL.txt << 'EOF'
           Ultramaster KR-106 — macOS Installation
 
-          AU:         Copy KR106.component to ~/Library/Audio/Plug-Ins/Components/
-          VST3:       Copy KR106.vst3 to ~/Library/Audio/Plug-Ins/VST3/
-          Standalone: Put KR106.app anywhere you like (e.g. /Applications)
+          1. Copy plugins to the correct locations:
 
-          After copying, restart your DAW to scan for new plugins.
+             AU:         ~/Library/Audio/Plug-Ins/Components/
+             VST3:       ~/Library/Audio/Plug-Ins/VST3/
+             Standalone: Anywhere you like (e.g. /Applications)
+
+          2. Remove the quarantine flag (required for unsigned plugins):
+
+             sudo xattr -rd com.apple.quarantine ~/Library/Audio/Plug-Ins/Components/KR106.component
+             sudo xattr -rd com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/KR106.vst3
+
+          3. Restart your DAW to scan for new plugins.
           EOF
           cd pkg && zip -r ../KR106-macOS.zip .
 
