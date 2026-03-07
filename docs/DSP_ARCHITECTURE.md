@@ -22,7 +22,7 @@ Global:
 
 ---
 
-## Oscillators (`KR106Oscillators.h`)
+## Oscillators (`Source/DSP/KR106Oscillators.h`)
 
 All oscillators use **PolyBLEP** anti-aliasing to smooth discontinuities.
 
@@ -66,28 +66,52 @@ Waveform switch gains ramp at 1/64 per sample (~1.5 ms at 44.1k) to prevent clic
 
 ---
 
-## VCF — 4-Pole Ladder Filter (`KR106Voice.h`)
+## VCF — 4-Pole Ladder Filter (`Source/DSP/KR106Voice.h`)
 
 **Topology:** Four cascaded 1-pole TPT (Trapezoidal Permanent Topology) integrators
-with OTA-saturated feedback. This models the IR3109 VCF chip.
+with OTA-saturated feedback, 2x oversampled. This models the IR3109 VCF chip.
 
 ### Why TPT?
 
 The integrator states are coefficient-independent: cutoff can change every sample
 without clicks or instability. This is critical for envelope and LFO modulation.
 
-### OTA Saturation
+### 2x Oversampling
 
-The Juno's IR3109 uses differential-pair OTA cells. At high signal levels the
-transconductance saturates, naturally limiting resonance peaks. Modeled with a
-Pade tanh approximant:
+The filter runs at double the audio sample rate using a 12-coefficient allpass
+polyphase halfband IIR (same algorithm and coefficients as Laurent de Soras' HIIR
+library). The input is upsampled, two filter iterations run per audio sample, and
+the output is downsampled. This extends the filter's clean operating range and
+reduces aliased harmonics from the nonlinear stages, especially at high cutoff
+and resonance.
+
+### Per-Stage OTA Nonlinearity
+
+The IR3109's four stages each contain an OTA differential pair. The transconductance
+follows a tanh characteristic: `I_out = I_bias * tanh(V_diff / 2V_T)`. At large
+signal swings this acts as a slew-rate limiter, causing signal-dependent cutoff
+shift and subtle harmonic generation.
+
+Each stage solves the implicit equation `y = s + g * tanh(x - y)` via one
+Newton-Raphson iteration from the linear TPT estimate. This avoids the zipper
+artifacts the explicit form produces at high cutoff + resonance. The tanh is
+approximated with a Pade rational function:
 
 ```
 tanh_approx(x) = x * (27 + x^2) / (27 + 9 * x^2)
 ```
 
-Applied to each integrator input, this soft-clips the signal and prevents runaway
-at high resonance without hard limiting.
+### Q Compensation
+
+The Juno-6's BA662 OTA-VCA feeds a portion of the input signal alongside the
+resonance feedback, boosting drive at high Q. This counteracts the passband
+volume drop inherent in ladder filters and pushes the OTA nonlinearities harder.
+Modeled as a gentle quadratic input gain ramp:
+
+```
+comp = 1 + res^2 * 0.5
+u = (input * comp - k * tanh(S)) / (1 + k * G)
+```
 
 ### Resonance
 
@@ -130,9 +154,11 @@ Result is exponentiated and clamped to `[20 Hz, 0.82 * Nyquist]`.
 
 ---
 
-## ADSR Envelope (`KR106Voice.h`)
+## ADSR Envelope (`Source/DSP/KR106Voice.h`)
 
-Calibrated to match Juno-106 hardware measurements.
+Two selectable modes via the **ADSR Mode** switch:
+
+### Juno-106 Mode (default)
 
 | Stage   | Shape       | Notes |
 |---------|-------------|-------|
@@ -140,6 +166,20 @@ Calibrated to match Juno-106 hardware measurements.
 | Decay   | Exponential | Fixed rate toward 0, stops when crossing sustain level |
 | Sustain | Tracked     | Ramps smoothly to new level on parameter change (up at 3x decay rate) |
 | Release | Exponential | Separate multiplier from decay (independent coefficient) |
+
+### Juno-6 Mode
+
+| Stage   | Shape       | Notes |
+|---------|-------------|-------|
+| Attack  | Exponential RC | One-pole charge toward 1.5 (comparator threshold at 1.0), matching IR3R01 behavior |
+| Decay   | Exponential | Same as 106 mode but with Juno-6 time range LUT |
+| Sustain | Tracked     | Same as 106 mode |
+| Release | Exponential | Juno-6 time range LUT |
+
+The Juno-6 attack uses `mEnv += (1.5 - mEnv) * coeff` — an RC charging curve
+that starts fast and decelerates toward the target, producing a rounder onset
+than the Juno-106's linear ramp. Attack/decay/release times use separate
+calibration LUTs for each mode.
 
 **Time constants:** Calculated to reach -60 dB at the specified millisecond value.
 Voice silences at -100 dB (1e-5).
@@ -152,7 +192,7 @@ matching in the hardware.
 
 ---
 
-## Per-Voice Variance (`KR106Voice.h`)
+## Per-Voice Variance (`Source/DSP/KR106Voice.h`)
 
 Each of the 6 voices gets deterministic offsets seeded by voice index,
 modeling the component tolerances of one physical Juno-106 unit:
@@ -168,7 +208,7 @@ Same offsets every session (deterministic seed), so a given unit sounds consiste
 
 ---
 
-## LFO (`KR106LFO.h`)
+## LFO (`Source/DSP/KR106LFO.h`)
 
 **Waveform:** Triangle with cubic soft-clip at peaks:
 ```
@@ -185,7 +225,7 @@ tri = tri * (1.5 - 0.5 * tri^2)
 
 ---
 
-## HPF — 4-Position High-Pass Filter (`KR106_DSP.h`)
+## HPF — 4-Position High-Pass Filter (`Source/DSP/KR106_DSP.h`)
 
 Replicates the Juno-106's 4052 analog switch network.
 
@@ -200,7 +240,7 @@ All filters use TPT topology for smooth modulation-free operation.
 
 ---
 
-## Chorus — BBD Emulation (`KR106Chorus.h`)
+## Chorus — BBD Emulation (`Source/DSP/KR106Chorus.h`)
 
 Models the Juno-106's MN3009 bucket-brigade delay chorus.
 
@@ -232,7 +272,7 @@ filter energy loss.
 
 ---
 
-## Arpeggiator (`KR106Arpeggiator.h`)
+## Arpeggiator (`Source/DSP/KR106Arpeggiator.h`)
 
 ### Modes
 
@@ -260,7 +300,7 @@ by octave range are excluded from the sequence.
 
 ---
 
-## Portamento & Unison (`KR106Voice.h`, `KR106_DSP.h`)
+## Portamento & Unison (`Source/DSP/KR106Voice.h`, `Source/DSP/KR106_DSP.h`)
 
 ### Modes
 
@@ -298,9 +338,10 @@ pulse widths and avoid silence at the extremes.
 
 | File | Role |
 |------|------|
-| `KR106_DSP.h` | Top-level orchestrator, HPF, signal routing |
-| `KR106Voice.h` | Per-voice: VCF, ADSR, oscillator mixing, portamento, variance |
-| `KR106Oscillators.h` | PolyBLEP saw, pulse, sub, noise generators |
-| `KR106Chorus.h` | BBD chorus with Hermite interpolation |
-| `KR106LFO.h` | Global triangle LFO with delay envelope |
-| `KR106Arpeggiator.h` | Note sequencer with Up/Down/Up-Down modes |
+| `Source/DSP/KR106_DSP.h` | Top-level orchestrator, HPF, signal routing |
+| `Source/DSP/KR106_DSP_SetParam.h` | Parameter dispatch, ADSR mode switching, LUT lookups |
+| `Source/DSP/KR106Voice.h` | Per-voice: VCF, ADSR, oscillator mixing, portamento, variance |
+| `Source/DSP/KR106Oscillators.h` | PolyBLEP saw, pulse, sub, noise generators |
+| `Source/DSP/KR106Chorus.h` | BBD chorus with Hermite interpolation |
+| `Source/DSP/KR106LFO.h` | Global triangle LFO with delay envelope |
+| `Source/DSP/KR106Arpeggiator.h` | Note sequencer with Up/Down/Up-Down modes |
