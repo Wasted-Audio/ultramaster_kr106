@@ -120,7 +120,7 @@ KR106Editor::KR106Editor(KR106AudioProcessor& p)
     add(new KR106ButtonLED(param(kChorusII), 2, ledRed, param(kPower)), 767, 43, 17, 28);
 
     // === SCOPE ===
-    mScope = add(new KR106Scope(&p), 791, 21, 128, 74);
+    mScope = add(new KR106Scope(&p), 790, 21, 128, 74);
 
     // === KEYBOARD ===
     mKeyboard = add(new KR106Keyboard(&p, chevron), 129, 106, 792, 114);

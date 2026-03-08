@@ -1,0 +1,56 @@
+name: Test Notarize
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-notarize:
+    runs-on: macos-latest
+    steps:
+      - name: Create dummy app for notarization test
+        run: |
+          mkdir -p TestNotarize.app/Contents/MacOS
+          cat > TestNotarize.app/Contents/Info.plist << 'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleIdentifier</key>
+            <string>com.ultramaster.test-notarize</string>
+            <key>CFBundleExecutable</key>
+            <string>test</string>
+          </dict>
+          </plist>
+          PLIST
+          echo '#!/bin/bash' > TestNotarize.app/Contents/MacOS/test
+          chmod +x TestNotarize.app/Contents/MacOS/test
+
+      - name: Import certificate
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          echo "$APPLE_CERTIFICATE" | base64 --decode > cert.p12
+          security create-keychain -p actions build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p actions build.keychain
+          security import cert.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k actions build.keychain
+          rm cert.p12
+
+      - name: Sign
+        run: |
+          codesign --force --deep --options runtime --sign "Developer ID Application" TestNotarize.app
+
+      - name: Notarize
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          ditto -c -k --keepParent TestNotarize.app test-notarize.zip
+          xcrun notarytool submit test-notarize.zip \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_PASSWORD" \
+            --wait --verbose
