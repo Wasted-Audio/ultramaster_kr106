@@ -6,6 +6,15 @@ KR106Editor::KR106Editor(KR106AudioProcessor& p)
 {
     setSize(940, 224);
 
+    // On non-HiDPI displays, scale UI 2x so @2x images render at native resolution
+    auto& displays = juce::Desktop::getInstance().getDisplays();
+    auto* display = displays.getPrimaryDisplay();
+    if (display && display->scale < 1.5)
+    {
+        setSize(1880, 448);
+        setTransform(juce::AffineTransform::scale(2.0f));
+    }
+
     // Load @2x images from binary data
     auto loadImg = [](const void* data, int size) {
         return juce::ImageCache::getFromMemory(data, size);

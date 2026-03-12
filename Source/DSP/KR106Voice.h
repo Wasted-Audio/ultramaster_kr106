@@ -96,7 +96,6 @@ public:
   }
 
   // Precomputed sample-rate constants (defaults for 44100 Hz)
-  float mLogNyq = 9.30792f;       // log(22050)
   float mInvNyq = 1.f / 22050.f;
   float mMinCPS = 20.f / 22050.f;
 
@@ -148,7 +147,6 @@ public:
     // VCF modulation works in log-frequency space; these convert
     // between log-Hz and normalized cutoff (cycles per sample).
     float nyq = mSampleRate * 0.5f;
-    mLogNyq = logf(nyq);       // log(Nyquist): scales modulation depth
     mInvNyq = 1.f / nyq;       // Hz → normalized cutoff
     mMinCPS = 20.f * mInvNyq;  // 20 Hz floor in normalized units
  
@@ -243,8 +241,8 @@ public:
 
       float vcfFrq = logf(mVcfFreq) + mVcfFreqOffset;
       vcfFrq += logf(baseFreq / 32.703f) * mVcfKbd;  // keyboard tracking: 1.0 = 100% = 1V/oct
-      vcfFrq += mLogNyq * env * mVcfEnv * envScale * float(mVcfEnvInvert);
-      vcfFrq += mLogNyq * lfo * mVcfLfo * kLfoScale;
+      vcfFrq += env * mVcfEnv * envScale * float(mVcfEnvInvert);
+      vcfFrq += lfo * mVcfLfo * kLfoScale;
       vcfFrq += 4.15888f * mRawBend * mBendVcf;  // bender (6 oct range, tuned separately)
 
       // Clamped to [20 Hz, 0.975 × Nyquist]: hardware range is 4 Hz–40 kHz,
