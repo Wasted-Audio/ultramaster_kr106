@@ -1,9 +1,10 @@
 cmake_minimum_required(VERSION 3.22)
-project(KR106 VERSION 2.1.7)
+project(KR106 VERSION 2.2.0)
 
 set(CMAKE_OSX_DEPLOYMENT_TARGET "13.0" CACHE STRING "Minimum macOS version")
 
 add_subdirectory(libs/JUCE)
+add_subdirectory(libs/clap-juce-extensions EXCLUDE_FROM_ALL)
 
 set(KR106_FORMATS AU VST3 LV2 Standalone)
 
@@ -57,4 +58,9 @@ target_link_libraries(KR106 PRIVATE
     juce::juce_audio_utils
     juce::juce_dsp
     KR106BinaryData
+)
+
+clap_juce_extensions_plugin(TARGET KR106
+    CLAP_ID "org.kayrock.kr106"
+    CLAP_FEATURES instrument synthesizer analog
 )
