@@ -37,4 +37,5 @@ jobs:
           path: |
             build/KR106_artefacts/**/VST3/
             build/KR106_artefacts/**/LV2/
+            build/KR106_artefacts/**/CLAP/
             build/KR106_artefacts/**/Standalone/
