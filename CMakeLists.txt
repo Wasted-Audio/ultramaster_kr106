@@ -5,14 +5,7 @@ set(CMAKE_OSX_DEPLOYMENT_TARGET "13.0" CACHE STRING "Minimum macOS version")
 
 add_subdirectory(libs/JUCE)
 
-# Platform-specific plugin formats
-if(APPLE)
-    set(KR106_FORMATS AU VST3 Standalone)
-elseif(UNIX)
-    set(KR106_FORMATS VST3 LV2 Standalone)
-else()
-    set(KR106_FORMATS VST3 Standalone)
-endif()
+set(KR106_FORMATS AU VST3 LV2 Standalone)
 
 juce_add_plugin(KR106
     COMPANY_NAME "Kayrock"
