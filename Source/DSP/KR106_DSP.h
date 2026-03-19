@@ -319,10 +319,10 @@ public:
     for (int s = 0; s < nFrames; s++)
       outputs[0][s] = static_cast<T>(mHPF.Process(static_cast<float>(outputs[0][s])));
 
-    // Master VCA before chorus — matches hardware signal chain
+    // VCA level + master volume before chorus — matches hardware signal chain
     // (JU-106 Service Notes: VCA IC5 → Chorus BBD).
     for (int s = 0; s < nFrames; s++)
-      outputs[0][s] *= static_cast<T>(mVcaLevel);
+      outputs[0][s] *= static_cast<T>(mVcaLevel * mMasterVol);
 
     // Always call Chorus::Process — even when bypassed it keeps the
     // delay lines, filter state, and LFO warm for click-free engagement.
@@ -396,6 +396,7 @@ public:
   kr106::Arpeggiator mArp;
 
   float mVcaLevel = 1.f;
+  float mMasterVol = 1.f;
   float mSampleRate = 44100.f;
   int mOctaveTranspose = 0;
   double mTuning = 0.;

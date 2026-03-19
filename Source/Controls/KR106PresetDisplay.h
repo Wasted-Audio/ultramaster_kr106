@@ -35,7 +35,7 @@ public:
         // Draw preset name left-aligned in green (Segment14 font)
         // Use drawSingleLineText at a fixed baseline to bypass JUCE font metrics
         g.setColour(juce::Colour(0, 220, 0));
-        g.setFont(juce::Font(mTypeface).withHeight(8.f));
+        g.setFont(juce::Font(juce::FontOptions(mTypeface).withMetricsKind(juce::TypefaceMetricsKind::legacy)).withHeight(8.f));
         g.drawSingleLineText(name, 3, h - 3);
     }
 

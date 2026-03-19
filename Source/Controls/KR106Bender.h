@@ -26,7 +26,8 @@ public:
 
         float h = static_cast<float>(getHeight());
         float trackY = h - 8.f; // gradient track always at bottom
-        float handleOff = mTriggered ? -4.f : 0.f; // handle shifts up 4px
+        bool triggered = mTriggered || (mProcessor && mProcessor->mLfoTriggered.load(std::memory_order_relaxed));
+        float handleOff = triggered ? -4.f : 0.f; // handle shifts up 4px
 
         // Black background (fixed position)
         g.setColour(black);
@@ -48,6 +49,7 @@ public:
 
         float baseEndY = trackY + 1.f;               // base stays on track
         float pointEndY = trackY + 1.f + handleOff;  // point end tilts up
+        float pointerCx = (pointx1 + pointx2 + 1.f) * 0.5f;
 
         // Gray outer shape (tilted quad)
         g.setColour(gray);
@@ -56,18 +58,33 @@ public:
             if (basex1 < pointx1) {
                 // base left, point right
                 p.startNewSubPath(basex1,        baseEndY);
-                p.lineTo(pointx2 + 2.f,         pointEndY);
-                p.lineTo(pointx2 + 2.f,         pointEndY + 6.f);
+                p.lineTo(pointx2,         pointEndY);
+                p.lineTo(pointx2,         pointEndY + 6.f);
                 p.lineTo(basex1,                 baseEndY + 6.f);
             } else {
                 // point left, base right
                 p.startNewSubPath(pointx1,       pointEndY);
-                p.lineTo(basex2 + 1.f,           baseEndY);
-                p.lineTo(basex2 + 1.f,           baseEndY + 6.f);
+                p.lineTo(basex2,           baseEndY);
+                p.lineTo(basex2,           baseEndY + 6.f);
                 p.lineTo(pointx1,                pointEndY + 6.f);
             }
             p.closeSubPath();
             g.fillPath(p);
+        }
+
+        // triggered stem
+        if (triggered)
+        {
+            float tipY = pointEndY + 6.f;      
+            float baseY = tipY + 3.5f;           
+            g.setColour(juce::Colour(gray));
+            juce::Path tri;
+            tri.startNewSubPath(pointerCx -3.f, tipY);
+            tri.lineTo(basex1, baseY);
+            tri.lineTo(basex2, baseY);
+            tri.lineTo(pointerCx + 3.f, tipY);
+            tri.closeSubPath();
+            g.fillPath(tri);
         }
 
         // White inner pointer (tilted quad)
@@ -88,7 +105,7 @@ public:
         g.fillRect(pointx1, pointEndY + 5.f, 1.f, 1.f);
         g.fillRect(pointx2, pointEndY, 1.f, 1.f);
         g.fillRect(pointx2, pointEndY + 5.f, 1.f, 1.f);
-    }
+        }
 
     void mouseDown(const juce::MouseEvent& e) override
     {

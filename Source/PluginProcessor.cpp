@@ -2,6 +2,35 @@
 #include "PluginEditor.h"
 #include "KR106_Presets_JUCE.h"
 
+// MIDI CC → EParams mapping (-1 = unmapped)
+static constexpr int kCCtoParam[128] = {
+  -1, -1, -1, kDcoLfo, -1, kPortaRate, -1, kVcaLevel,  // CC 0-7
+  -1, kDcoSub, -1, -1, kHpfFreq, kDcoNoise, -1, -1,       // CC 8-15
+  -1, -1, -1, -1, -1, -1, -1, -1,                       // CC 16-23
+  -1, -1, -1, -1, -1, -1, -1, -1,                       // CC 24-31
+  -1, -1, -1, -1, -1, -1, -1, -1,                       // CC 32-39
+  -1, -1, -1, -1, -1, -1, -1, -1,                       // CC 40-47
+  -1, -1, -1, -1, -1, -1, -1, -1,                       // CC 48-55
+  -1, -1, -1, -1, -1, -1, -1, -1,                       // CC 56-63
+  -1, -1, -1, -1, -1, -1, kEnvS, kVcfRes,               // CC 64-71
+  kEnvR, kEnvA, kVcfFreq, kEnvD, kVcfEnv, kVcfLfo,      // CC 72-77
+  kVcfKbd, kDcoPwm, kLfoRate, kLfoDelay, kArpRate, -1,   // CC 78-83
+  -1, -1, -1, -1, -1, -1, -1, -1,                       // CC 84-91
+  -1, -1, -1, -1, -1, -1, -1, -1,                       // CC 92-99
+  -1, -1, -1, -1, -1, -1, -1, -1,                       // CC 100-107
+  -1, -1, -1, -1, -1, -1, -1, -1,                       // CC 108-115
+  -1, -1, -1, -1, -1, -1, -1, -1,                       // CC 116-123
+  -1, -1, -1, -1,                                        // CC 124-127
+};
+
+// Roland Juno-106 SysEx control → EParams mapping (0x00–0x0F)
+static constexpr int kSysExToParam[16] = {
+  kLfoRate, kLfoDelay, kDcoLfo, kDcoPwm,    // 0x00-0x03
+  kDcoNoise, kVcfFreq, kVcfRes, kVcfEnv,    // 0x04-0x07
+  kVcfLfo, kVcfKbd, kVcaLevel, kEnvA,       // 0x08-0x0B
+  kEnvD, kEnvS, kEnvR, kDcoSub,             // 0x0C-0x0F
+};
+
 KR106AudioProcessor::KR106AudioProcessor()
   : AudioProcessor(BusesProperties()
       .withOutput("Output", juce::AudioChannelSet::stereo(), true))
@@ -422,30 +451,71 @@ void KR106AudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
         bool pedalDown = msg.getControllerValue() >= 64;
         mParams[kHold]->setValueNotifyingHost(pedalDown ? 1.0f : 0.0f);
       }
-      else
+      else if (cc == 1)
       {
-        mDSP.ControlChange(cc, msg.getControllerValue() / 127.f);
+        mDSP.ControlChange(1, msg.getControllerValue() / 127.f);
+        mLfoTriggered.store(msg.getControllerValue() > 0, std::memory_order_relaxed);
+      }
+      else if (kCCtoParam[cc] >= 0)
+      {
+        int param = kCCtoParam[cc];
+        if (param == kHpfFreq)
+        {
+          int hpf = msg.getControllerValue() / 32; // 0-31→0, 32-63→1, 64-95→2, 96-127→3
+          if (hpf > 3) hpf = 3;
+          mParams[param]->setValueNotifyingHost(mParams[param]->convertTo0to1(static_cast<float>(hpf)));
+        }
+        else
+          mParams[param]->setValueNotifyingHost(msg.getControllerValue() / 127.f);
       }
     }
     else if (msg.isPitchWheel())
     {
       float bend = (msg.getPitchWheelValue() - 8192) / 8192.f;
-      mDSP.SetParam(kBender, static_cast<double>(bend));
+      mParams[kBender]->setValueNotifyingHost(bend * 0.5f + 0.5f);
+    }
+    else if (msg.isSysEx())
+    {
+      // Roland Juno-106 SysEx: F0 41 32 0n cc vv F7
+      auto* data = msg.getSysExData();
+      int len = msg.getSysExDataSize();
+      if (len >= 4 && data[0] == 0x41 && data[1] == 0x32)
+      {
+        int ctrl = data[3];
+        int val  = (len >= 5) ? data[4] : 0;
+        if (ctrl <= 0x0F)
+          mParams[kSysExToParam[ctrl]]->setValueNotifyingHost(val / 127.f);
+        else if (ctrl == 0x10)
+        {
+          // Switches 1: octave, pulse, saw, chorus
+          int oct = (val & 0x04) ? 2 : (val & 0x02) ? 1 : 0; // bit2=4', bit1=8', bit0=16'
+          mParams[kOctTranspose]->setValueNotifyingHost(mParams[kOctTranspose]->convertTo0to1(static_cast<float>(oct)));
+          mParams[kDcoPulse]->setValueNotifyingHost((val & 0x08) ? 1.f : 0.f);
+          mParams[kDcoSaw]->setValueNotifyingHost((val & 0x10) ? 1.f : 0.f);
+          bool chorusOn = !(val & 0x20); // bit5: 0 = chorus on
+          bool chorusL1 = (val & 0x40);  // bit6: 1 = level 1, 0 = level 2
+          mParams[kChorusOff]->setValueNotifyingHost(chorusOn ? 0.f : 1.f);
+          mParams[kChorusI]->setValueNotifyingHost((chorusOn && chorusL1) ? 1.f : 0.f);
+          mParams[kChorusII]->setValueNotifyingHost((chorusOn && !chorusL1) ? 1.f : 0.f);
+        }
+        else if (ctrl == 0x11)
+        {
+          // Switches 2: PWM mode, VCF polarity, VCA mode, HPF
+          mParams[kPwmMode]->setValueNotifyingHost(mParams[kPwmMode]->convertTo0to1(static_cast<float>((val & 0x01) ? 0 : 1)));
+          mParams[kVcfEnvInv]->setValueNotifyingHost((val & 0x02) ? 1.f : 0.f);
+          mParams[kVcaMode]->setValueNotifyingHost((val & 0x04) ? 0.f : 1.f); // 0=GATE, 1=ENV
+          int hpf = 3 - ((val >> 3) & 0x03); // 00=3, 01=2, 10=1, 11=0
+          mParams[kHpfFreq]->setValueNotifyingHost(mParams[kHpfFreq]->convertTo0to1(static_cast<float>(hpf)));
+        }
+      }
     }
   }
 
   // --- Process DSP ---
   float* outputs[2] = { buffer.getWritePointer(0),
                          nOutputs > 1 ? buffer.getWritePointer(1) : buffer.getWritePointer(0) };
+  mDSP.mMasterVol = getParamValue(kMasterVol);
   mDSP.ProcessBlock(nullptr, outputs, nOutputs, nFrames);
-
-  // --- Master volume ---
-  float masterVol = getParamValue(kMasterVol);
-  for (int i = 0; i < nFrames; i++)
-  {
-    outputs[0][i] *= masterVol;
-    if (nOutputs > 1) outputs[1][i] *= masterVol;
-  }
 
   // --- Mute if power off ---
   if (!mPowerOn)

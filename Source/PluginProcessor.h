@@ -70,6 +70,7 @@ public:
 
   // Keyboard held-note display (audio thread writes, UI timer reads)
   std::bitset<128> mKeyboardHeld;
+  std::atomic<bool> mLfoTriggered{false}; // CC1 mod state (audio→UI)
 
 private:
   // Parameter listener: push param changes to DSP
